@@ -813,9 +813,9 @@ export default function App() {
                 {/* Mirrored real-time video element (Always in DOM to ensure videoRef is consistently bound, resolving mobile black screen issues) */}
                 <video
                   ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
+                  autoPlay={true}
+                  playsInline={true}
+                  muted={true}
                   onLoadedMetadata={(e) => {
                     const video = e.currentTarget;
                     console.log("Video metadata loaded. Native resolution:", video.videoWidth, "x", video.videoHeight);
@@ -832,9 +832,10 @@ export default function App() {
                       console.warn("Retrigger play failed on canplay event:", err);
                     });
                   }}
+                  style={videoDimensions ? { width: `${videoDimensions.width}px`, height: `${videoDimensions.height}px`, maxWidth: '100%', maxHeight: '100%' } : { width: '100%', height: '100%' }}
                   width={videoDimensions?.width || undefined}
                   height={videoDimensions?.height || undefined}
-                  className={`w-full h-full object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)} ${stream ? 'block' : 'hidden'}`}
+                  className={`object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)} ${stream ? 'w-full h-full opacity-100 relative pointer-events-auto' : 'w-1 h-1 opacity-0 absolute pointer-events-none'}`}
                 />
 
                 {!stream && (
