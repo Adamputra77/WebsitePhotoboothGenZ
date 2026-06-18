@@ -1,0 +1,6 @@
+{
+  "name": "Online Photobooth",
+  "description": "An interactive online photobooth applet featuring filters, custom frames, automated multi-photo countdowns, audio-visual feedback, and high-quality item strips for download.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
