@@ -175,6 +175,7 @@ export default function App() {
   // DOM references
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<any>(null);
+  const activeStreamDeviceIdRef = useRef<string | null>(null);
 
   // Initialize camera selection & check capability
   useEffect(() => {
@@ -197,6 +198,28 @@ export default function App() {
       startCameraStream(selectedDeviceId);
     }
   }, [selectedDeviceId]);
+
+  // Instantly bind active media stream to the always-mounted video element (Crucial for iOS/Android WebView video activation)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    if (stream) {
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
+      
+      // Force trigger playback to overcome browser auto-play sandbox restrictions
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.warn("Autoplay / stream play was prevented by browser:", error);
+        });
+      }
+    } else {
+      video.srcObject = null;
+    }
+  }, [stream]);
 
   // Handle auto-regeneration of the combined photo strip when photos, frame, backgrounds or text change
   useEffect(() => {
@@ -221,35 +244,77 @@ export default function App() {
   };
 
   const startCameraStream = async (deviceId?: string) => {
+    // If we are already streaming, and the requested deviceId is either undefined (meaning use any default) or matches the current active deviceId, skip to avoid race condition/blank screen lockups
+    if (stream && (deviceId === undefined || activeStreamDeviceIdRef.current === deviceId)) {
+      console.log('Camera is already active and matches requested config. Skipping restart.');
+      return;
+    }
+
     setCameraLoading(true);
     setCameraError(null);
     stopCameraStream();
 
     const constraints: MediaStreamConstraints = {
-      video: deviceId 
-        ? { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+      video: (deviceId && deviceId !== 'default' && deviceId !== '')
+        ? { deviceId: { ideal: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
         : { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
       audio: false
     };
 
+    let mediaStream: MediaStream;
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err: any) {
+      console.warn('First getUserMedia capture failed, attempting front face fallback...', err);
+      try {
+        // Fallback 1: Force front-facing camera setting
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false
+        });
+      } catch (fallbackErr: any) {
+        console.warn('Front facing fallback failed, attempting generic video fallback...', fallbackErr);
+        try {
+          // Fallback 2: Any available camera
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        } catch (ultimateErr: any) {
+          console.error('Ultimate camera capture request failed:', ultimateErr);
+          if (ultimateErr.name === 'NotAllowedError' || ultimateErr.name === 'PermissionDeniedError') {
+            setCameraError(t.cameraAccessDenied);
+          } else {
+            setCameraError(t.cameraNotFound);
+          }
+          setCameraLoading(false);
+          return;
+        }
+      }
+    }
+
+    try {
       setStream(mediaStream);
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+      }
+
+      // Track active device ID
+      const activeVideoTrack = mediaStream.getVideoTracks()[0];
+      const activeSettings = activeVideoTrack?.getSettings();
+      const actualDeviceId = activeSettings?.deviceId || deviceId || null;
+      activeStreamDeviceIdRef.current = actualDeviceId;
+
+      if (actualDeviceId && actualDeviceId !== selectedDeviceId) {
+        setSelectedDeviceId(actualDeviceId);
       }
       
       // Enumerate list again just in case permissions unlocked more detailed info (labels, etc)
       const list = await navigator.mediaDevices.enumerateDevices();
       setDevices(list.filter(d => d.kind === 'videoinput'));
     } catch (err: any) {
-      console.error('getUserMedia Error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError(t.cameraAccessDenied);
-      } else {
-        setCameraError(t.cameraNotFound);
-      }
+      console.error('Error preparing media stream layout:', err);
     } finally {
       setCameraLoading(false);
     }
@@ -260,6 +325,7 @@ export default function App() {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+    activeStreamDeviceIdRef.current = null;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -742,18 +808,18 @@ export default function App() {
               {/* VIEWPORT STAGE CONTAINER */}
               <div id="video-frame-viewfinder" className="aspect-[4/3] bg-black/50 rounded-2xl overflow-hidden relative shadow-inner flex items-center justify-center group-hover:scale-[1.01] transition-transform border border-white/5">
                 
-                {stream ? (
-                  // Mirrored real-time video element
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={`w-full h-full object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)}`}
-                  />
-                ) : (
+                {/* Mirrored real-time video element (Always in DOM to ensure videoRef is consistently bound, resolving mobile black screen issues) */}
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)} ${stream ? 'block' : 'hidden'}`}
+                />
+
+                {!stream && (
                   // Fallback feed if video not started
-                  <div className="flex flex-col items-center p-8 text-center max-w-sm">
+                  <div className="flex flex-col items-center p-8 text-center max-w-sm absolute inset-0 justify-center">
                     <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 mb-4 border border-white/10">
                       <CameraOff className="w-8 h-8 text-pink-500/80" />
                     </div>
