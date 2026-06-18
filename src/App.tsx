@@ -147,6 +147,7 @@ export default function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
+  const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Booth Preferences
   const [isFourStripMode, setIsFourStripMode] = useState<boolean>(true);
@@ -218,6 +219,7 @@ export default function App() {
       }
     } else {
       video.srcObject = null;
+      setVideoDimensions(null);
     }
   }, [stream]);
 
@@ -814,6 +816,24 @@ export default function App() {
                   autoPlay
                   playsInline
                   muted
+                  onLoadedMetadata={(e) => {
+                    const video = e.currentTarget;
+                    console.log("Video metadata loaded. Native resolution:", video.videoWidth, "x", video.videoHeight);
+                    if (video.videoWidth && video.videoHeight) {
+                      setVideoDimensions({ width: video.videoWidth, height: video.videoHeight });
+                    }
+                    // Explicitly force replay to bypass mobile autostart locks
+                    video.play().catch(err => {
+                      console.warn("Retrigger play failed on loadedmetadata event:", err);
+                    });
+                  }}
+                  onCanPlay={(e) => {
+                    e.currentTarget.play().catch(err => {
+                      console.warn("Retrigger play failed on canplay event:", err);
+                    });
+                  }}
+                  width={videoDimensions?.width || undefined}
+                  height={videoDimensions?.height || undefined}
                   className={`w-full h-full object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)} ${stream ? 'block' : 'hidden'}`}
                 />
 
