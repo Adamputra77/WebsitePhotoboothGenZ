@@ -147,7 +147,6 @@ export default function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
-  const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Booth Preferences
   const [isFourStripMode, setIsFourStripMode] = useState<boolean>(true);
@@ -219,7 +218,6 @@ export default function App() {
       }
     } else {
       video.srcObject = null;
-      setVideoDimensions(null);
     }
   }, [stream]);
 
@@ -810,37 +808,18 @@ export default function App() {
               {/* VIEWPORT STAGE CONTAINER */}
               <div id="video-frame-viewfinder" className="aspect-[4/3] bg-black/50 rounded-2xl overflow-hidden relative shadow-inner flex items-center justify-center group-hover:scale-[1.01] transition-transform border border-white/5">
                 
-                {/* Mirrored real-time video element (Always in DOM to ensure videoRef is consistently bound, resolving mobile black screen issues) */}
+                {/* Mirrored real-time video element (Always in DOM and statically sized as full container to prevent iOS/Safari black screen layout locks) */}
                 <video
                   ref={videoRef}
                   autoPlay={true}
                   playsInline={true}
                   muted={true}
-                  onLoadedMetadata={(e) => {
-                    const video = e.currentTarget;
-                    console.log("Video metadata loaded. Native resolution:", video.videoWidth, "x", video.videoHeight);
-                    if (video.videoWidth && video.videoHeight) {
-                      setVideoDimensions({ width: video.videoWidth, height: video.videoHeight });
-                    }
-                    // Explicitly force replay to bypass mobile autostart locks
-                    video.play().catch(err => {
-                      console.warn("Retrigger play failed on loadedmetadata event:", err);
-                    });
-                  }}
-                  onCanPlay={(e) => {
-                    e.currentTarget.play().catch(err => {
-                      console.warn("Retrigger play failed on canplay event:", err);
-                    });
-                  }}
-                  style={videoDimensions ? { width: `${videoDimensions.width}px`, height: `${videoDimensions.height}px`, maxWidth: '100%', maxHeight: '100%' } : { width: '100%', height: '100%' }}
-                  width={videoDimensions?.width || undefined}
-                  height={videoDimensions?.height || undefined}
-                  className={`object-cover scale-x-[-1] transition-all object-center ${getFilterCssClass(selectedFilter)} ${stream ? 'w-full h-full opacity-100 relative pointer-events-auto' : 'w-1 h-1 opacity-0 absolute pointer-events-none'}`}
+                  className={`w-full h-full object-cover scale-x-[-1] block transition-opacity duration-300 object-center ${getFilterCssClass(selectedFilter)}`}
                 />
 
                 {!stream && (
-                  // Fallback feed if video not started
-                  <div className="flex flex-col items-center p-8 text-center max-w-sm absolute inset-0 justify-center">
+                  // Fallback feed if video not started (renders over video with z-10 absolute layout)
+                  <div className="flex flex-col items-center p-8 text-center absolute inset-0 justify-center bg-[#0d0d12] z-10">
                     <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 mb-4 border border-white/10">
                       <CameraOff className="w-8 h-8 text-pink-500/80" />
                     </div>
